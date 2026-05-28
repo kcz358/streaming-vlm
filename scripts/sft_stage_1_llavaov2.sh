@@ -64,7 +64,6 @@ WANDB_PROJECT=$WANDB_PROJECT_NAME \
 TOKENIZERS_PARALLELISM=false \
 torchrun --standalone --nproc_per_node=$NPROC_PER_NODE train.py \
     --deepspeed ./scripts/zero3.json \
-    --overwrite_output_dir True \
     --output_dir "${OUTPUT_DIR}/${RUN_NAME}_${timestamp}" \
     --run_name "$RUN_NAME" \
     --save_on_each_node True \
