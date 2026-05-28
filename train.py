@@ -58,7 +58,7 @@ def _is_llava_onevision2(config) -> bool:
 
 def _is_qwen2_5_vl(config) -> bool:
     archs = getattr(config, "architectures", None) or []
-    return any("Qwen2_5_VL" in a or "Qwen2VL" in a for a in archs)
+    return any("Qwen2_5_VL" in a for a in archs)
 
 
 if __name__ == "__main__":
@@ -90,9 +90,9 @@ if __name__ == "__main__":
 
         # Freeze the vision tower. For LlavaOnevision2, `model.visual` is a property that
         # returns model.model.visual, so this freezes the actual parameters.
-        if hasattr(model, "visual"):
-            model.visual.requires_grad_(False)
-            print("Freezing module visual (via model.visual property)")
+        assert hasattr(model, "visual"), "LlavaOnevision2 model is expected to expose `.visual`; got %r" % type(model)
+        model.visual.requires_grad_(False)
+        print("Freezing module visual (via model.visual property)")
     elif _is_qwen2_5_vl(config):
         # Re-apply the original Qwen2.5-VL hacks only when actually training Qwen2.5-VL.
         import liger_kernel.transformers.model.qwen2_5_vl as qwen2_5_vl
@@ -112,16 +112,11 @@ if __name__ == "__main__":
                 print(f"Freezing module {m}")
             except Exception:
                 print(f"Module {m} not found in model")
-        if "Qwen2VL" in model.config.architectures[0]:
-            processor = AutoProcessor.from_pretrained(
-                "Qwen/Qwen2-VL-7B-Instruct", padding_side="right"
-            )
-        else:
-            processor = AutoProcessor.from_pretrained(
-                model_args.pretrained_model_name_or_path,
-                padding_side="right",
-                trust_remote_code=True,
-            )
+        processor = AutoProcessor.from_pretrained(
+            model_args.pretrained_model_name_or_path,
+            padding_side="right",
+            trust_remote_code=True,
+        )
         # Qwen2.5-VL-specific embedding-aliasing hack.
         if hasattr(model, "llm_model_embed_tokens"):
             print("delattr llm_model_embed_tokens")
