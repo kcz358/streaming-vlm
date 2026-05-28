@@ -27,8 +27,9 @@ def compute_loss_logging_labels(self, model, inputs, return_outputs=False, num_i
     outputs = model(**inputs)
     # Save past state if it exists
     # TODO: this needs to be fixed and made cleaner later.
-    if self.args.past_index >= 0:
-        self._past = outputs[self.args.past_index]
+    past_index = getattr(self.args, "past_index", -1)
+    if past_index >= 0:
+        self._past = outputs[past_index]
 
     if labels is not None:
         unwrapped_model = self.accelerator.unwrap_model(model)

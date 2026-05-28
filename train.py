@@ -88,6 +88,23 @@ if __name__ == "__main__":
             trust_remote_code=True,
         )
 
+        # Patch: LlavaOnevision2Processor lacks save_pretrained, which Trainer.save_model needs.
+        # Delegate to the tokenizer (which has it via PreTrainedTokenizerBase) and image processor.
+        if not hasattr(processor, "save_pretrained"):
+            def _processor_save_pretrained(self, save_directory, **kwargs):
+                os.makedirs(save_directory, exist_ok=True)
+                if getattr(self, "tokenizer", None) is not None:
+                    self.tokenizer.save_pretrained(save_directory, **kwargs)
+                if getattr(self, "image_processor", None) is not None:
+                    self.image_processor.save_pretrained(save_directory, **kwargs)
+                if getattr(self, "video_processor", None) is not None:
+                    try:
+                        self.video_processor.save_pretrained(save_directory, **kwargs)
+                    except AttributeError:
+                        # Bundled custom video processor may not have save_pretrained; skip.
+                        pass
+            processor.save_pretrained = MethodType(_processor_save_pretrained, processor)
+
         # Freeze the vision tower. For LlavaOnevision2, `model.visual` is a property that
         # returns model.model.visual, so this freezes the actual parameters.
         assert hasattr(model, "visual"), "LlavaOnevision2 model is expected to expose `.visual`; got %r" % type(model)
