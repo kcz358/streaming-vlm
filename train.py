@@ -113,9 +113,11 @@ if __name__ == "__main__":
         )
 
         # Patch: LlavaOnevision2Processor lacks save_pretrained, which Trainer.save_model needs.
-        # Bind a module-level shim (so DataLoader workers can pickle the processor).
+        # Attach the shim on the CLASS (not the instance) so DataLoader workers can pickle
+        # the processor — pickle resolves bound methods via type(obj).method_name, not the
+        # instance dict. Defined at module top-level for pickle name-based lookup.
         if not hasattr(processor, "save_pretrained"):
-            processor.save_pretrained = MethodType(_llavaov2_processor_save_pretrained, processor)
+            type(processor).save_pretrained = _llavaov2_processor_save_pretrained
 
         # Freeze the vision tower. For LlavaOnevision2, `model.visual` is a property that
         # returns model.model.visual, so this freezes the actual parameters.
