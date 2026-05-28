@@ -22,6 +22,30 @@ from streaming_vlm.data.lmm_dataset import DataArguments, LMMDataset, EvalDataAr
 logger = logging.get_logger(__name__)
 
 
+def _llavaov2_processor_save_pretrained(self, save_directory, **kwargs):
+    """Module-level save_pretrained shim for LlavaOnevision2Processor.
+
+    The bundled trust_remote_code processor lacks ``save_pretrained`` but
+    transformers' ``Trainer.save_model`` calls it on every checkpoint write.
+    We attach this function as a bound method to the processor instance.
+
+    Defined at module top-level (not as an inner closure) so that DataLoader
+    workers can pickle the processor: pickle locates bound methods by the
+    fully-qualified name of their underlying function.
+    """
+    os.makedirs(save_directory, exist_ok=True)
+    if getattr(self, "tokenizer", None) is not None:
+        self.tokenizer.save_pretrained(save_directory, **kwargs)
+    if getattr(self, "image_processor", None) is not None:
+        self.image_processor.save_pretrained(save_directory, **kwargs)
+    if getattr(self, "video_processor", None) is not None:
+        try:
+            self.video_processor.save_pretrained(save_directory, **kwargs)
+        except AttributeError:
+            # Bundled custom video processor may not have save_pretrained; skip.
+            pass
+
+
 def find_resume_checkpoint(run_name: str, output_dir: str):
     parent = os.path.dirname(os.path.abspath(output_dir))
     if not os.path.isdir(parent):
@@ -89,21 +113,9 @@ if __name__ == "__main__":
         )
 
         # Patch: LlavaOnevision2Processor lacks save_pretrained, which Trainer.save_model needs.
-        # Delegate to the tokenizer (which has it via PreTrainedTokenizerBase) and image processor.
+        # Bind a module-level shim (so DataLoader workers can pickle the processor).
         if not hasattr(processor, "save_pretrained"):
-            def _processor_save_pretrained(self, save_directory, **kwargs):
-                os.makedirs(save_directory, exist_ok=True)
-                if getattr(self, "tokenizer", None) is not None:
-                    self.tokenizer.save_pretrained(save_directory, **kwargs)
-                if getattr(self, "image_processor", None) is not None:
-                    self.image_processor.save_pretrained(save_directory, **kwargs)
-                if getattr(self, "video_processor", None) is not None:
-                    try:
-                        self.video_processor.save_pretrained(save_directory, **kwargs)
-                    except AttributeError:
-                        # Bundled custom video processor may not have save_pretrained; skip.
-                        pass
-            processor.save_pretrained = MethodType(_processor_save_pretrained, processor)
+            processor.save_pretrained = MethodType(_llavaov2_processor_save_pretrained, processor)
 
         # Freeze the vision tower. For LlavaOnevision2, `model.visual` is a property that
         # returns model.model.visual, so this freezes the actual parameters.
