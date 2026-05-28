@@ -31,8 +31,11 @@ model_name=${MODEL_NAME:-/data/v-kaichen/azure_blob/pretrained_models/huggingfac
 NPROC_PER_NODE=${NPROC_PER_NODE:-4}
 
 # ---- W&B / output ----
-WANDB_API_KEY=${WANDB_API_KEY:-your-wandb-api-key}
-WANDB_ENTITY=${WANDB_ENTITY:-your-wandb-entity}
+# Empty defaults: WANDB_API_KEY/ENTITY/PROJECT must be set by the caller (or via
+# the wandb login cache). Passing a literal "your-wandb-entity" to torchrun
+# causes wandb.init() to abort with `entity ... not found during upsertBucket`.
+WANDB_API_KEY=${WANDB_API_KEY:-}
+WANDB_ENTITY=${WANDB_ENTITY:-}
 WANDB_PROJECT_NAME=${WANDB_PROJECT_NAME:-StreamingVLM_LlavaOV2_SFT_stage_1}
 
 timestamp=$(date +%Y%m%d_%H%M%S)
@@ -56,12 +59,15 @@ VALID_FILES=("${VALID_DATASET_NAMES[@]/#/$DATASET_PATH/}")
 
 # ---- Run ----
 export TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC=1800
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TOKENIZERS_PARALLELISM=false
+export WANDB_PROJECT=$WANDB_PROJECT_NAME
 
-PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
-WANDB_API_KEY=$WANDB_API_KEY \
-WANDB_ENTITY=$WANDB_ENTITY \
-WANDB_PROJECT=$WANDB_PROJECT_NAME \
-TOKENIZERS_PARALLELISM=false \
+# Only export WANDB_* when explicitly set, so wandb falls back to its default
+# (login cache / api key default entity) when the caller doesn't override.
+if [ -n "$WANDB_API_KEY" ]; then export WANDB_API_KEY; fi
+if [ -n "$WANDB_ENTITY" ]; then export WANDB_ENTITY; fi
+
 torchrun --standalone --nproc_per_node=$NPROC_PER_NODE train.py \
     --deepspeed ./scripts/zero3.json \
     --output_dir "${OUTPUT_DIR}/${RUN_NAME}_${timestamp}" \
