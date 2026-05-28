@@ -27,11 +27,20 @@ class mute_stderr_ffmpeg:
 logger = logging.get_logger(__name__)
 
 def _video_tensor_to_np_frames(video):
-    """Convert a (T,3,H,W) uint8 torch.Tensor of frames to list[np.ndarray (H,W,3) uint8]."""
-    import numpy as np
+    """Convert a (T,3,H,W) torch.Tensor of frames to list[np.ndarray (H,W,3) uint8].
+
+    Frames are expected to come from livecc_utils._spatial_resize_video, which
+    yields float32 (T,3,H,W) tensors in the [0, 255] range (BICUBIC resize of
+    uint8 frames, not normalized). uint8 inputs are also accepted unchanged.
+    """
     if isinstance(video, torch.Tensor):
+        assert video.ndim == 4 and video.shape[1] == 3, (
+            f"_video_tensor_to_np_frames expects (T,3,H,W) tensor, got shape {tuple(video.shape)}"
+        )
         if video.dtype != torch.uint8:
-            video = video.to(torch.uint8)
+            # float32 [0, 255] from BICUBIC resize: clamp to handle overshoot,
+            # round to avoid biased truncation, then cast.
+            video = video.clamp(0, 255).round().to(torch.uint8)
         # (T,3,H,W) -> (T,H,W,3)
         arr = video.permute(0, 2, 3, 1).contiguous().cpu().numpy()
         return [arr[i] for i in range(arr.shape[0])]
