@@ -102,16 +102,18 @@ class LMMDataset(Dataset):
             self.handles.extend(zip([annotation_path] * len(seeks), seeks))
             logger.warning(f"Successfully loaded {annotation_path}")
 
-        if 'Qwen2VL' in processor.__class__.__name__:
+        proc_name = processor.__class__.__name__
+        if 'Qwen2VL' in proc_name or 'Qwen2_5_VL' in proc_name:
             self.im_start_id, self.assistant_id, self.newline_id, self.im_end_id = processor.tokenizer('<|im_start|>assistant\n<|im_end|>').input_ids
             self.get_range = get_qwen_range
             self.model_base = 'Qwen2'
-        elif 'Qwen2_5_VL' in processor.__class__.__name__:
+        elif 'LlavaOnevision2' in proc_name:
+            # Same Qwen tokenizer family; im_start/im_end/assistant IDs are identical.
             self.im_start_id, self.assistant_id, self.newline_id, self.im_end_id = processor.tokenizer('<|im_start|>assistant\n<|im_end|>').input_ids
             self.get_range = get_qwen_range
-            self.model_base = 'Qwen2'
+            self.model_base = 'LlavaOnevision2'
         else:
-            raise NotImplementedError(f"Video preprocessing for {processor.__class__.__name__} is not implemented")
+            raise NotImplementedError(f"Video preprocessing for {proc_name} is not implemented")
 
         self.processor = processor
         self.with_context = with_context
