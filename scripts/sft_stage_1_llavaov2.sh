@@ -102,4 +102,5 @@ torchrun --standalone --nproc_per_node=$NPROC_PER_NODE train.py \
     --per_device_eval_batch_size 1 \
     --eval_annotation_paths "${VALID_FILES[@]}" \
     --text_sink $text_sink \
-    --text_sliding_window $TEXT_SLIDING_WINDOW
+    --text_sliding_window $TEXT_SLIDING_WINDOW \
+    "$@"
