@@ -26,6 +26,17 @@ class mute_stderr_ffmpeg:
 
 logger = logging.get_logger(__name__)
 
+def _video_tensor_to_np_frames(video):
+    """Convert a (T,3,H,W) uint8 torch.Tensor of frames to list[np.ndarray (H,W,3) uint8]."""
+    import numpy as np
+    if isinstance(video, torch.Tensor):
+        if video.dtype != torch.uint8:
+            video = video.to(torch.uint8)
+        # (T,3,H,W) -> (T,H,W,3)
+        arr = video.permute(0, 2, 3, 1).contiguous().cpu().numpy()
+        return [arr[i] for i in range(arr.shape[0])]
+    return video  # already list[np.ndarray] or list[PIL.Image] etc.
+
 @dataclass
 class DataArguments:
     train_annotation_paths: list[str] = None
@@ -287,12 +298,25 @@ class LMMDataset(Dataset):
             return conversation
         texts = self.processor.apply_chat_template(conversation, tokenize=False, add_generation_prompt=False, return_tensors='pt')
         
-        inputs = self.processor(
-            text=texts,
-            images=image_inputs,
-            videos=video_inputs,
-            return_tensors="pt",
-        )
+        if self.model_base == 'LlavaOnevision2' and video_inputs is not None:
+            # LlavaOnevision2VideoProcessor accepts file path / list[PIL] / list[np.ndarray] only.
+            video_inputs = [_video_tensor_to_np_frames(v) for v in video_inputs]
+            # The processor's video path expects one <|video_pad|> per video and one frame list per video.
+            # Use num_frames=None so the processor takes len(frames) directly (no resampling).
+            inputs = self.processor(
+                text=texts,
+                images=image_inputs,
+                videos=video_inputs,
+                num_frames=None,
+                return_tensors="pt",
+            )
+        else:
+            inputs = self.processor(
+                text=texts,
+                images=image_inputs,
+                videos=video_inputs,
+                return_tensors="pt",
+            )
 
         if self.text_sink != 0 or self.text_sliding_window != 0:
             previous_text_start_idx, previous_text_end_idx = self.get_range(inputs.input_ids, 'previous text', 0, contain_lf=True)
